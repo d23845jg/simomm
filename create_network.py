@@ -126,7 +126,7 @@ class ResnetDilated(nn.Module):
 class MTANDeepLabv3(nn.Module):
     def __init__(self, tasks):
         super(MTANDeepLabv3, self).__init__()
-        backbone = ResnetDilated(resnet.resnet50())
+        backbone = ResnetDilated(resnet.resnet50(weights="IMAGENET1K_V2"))
         ch = [256, 512, 1024, 2048]
 
         self.tasks = tasks
@@ -226,22 +226,60 @@ class MTANDeepLabv3(nn.Module):
         return out
 
     def shared_modules(self):
-        return [self.shared_conv,
-                self.shared_layer1_b,
-                self.shared_layer1_t,
-                self.shared_layer2_b,
-                self.shared_layer2_t,
-                self.shared_layer3_b,
-                self.shared_layer3_t,
-                self.shared_layer4_b,
-                self.shared_layer4_t,
-                self.encoder_block_att_1,
-                self.encoder_block_att_2,
-                self.encoder_block_att_3]
+        return [
+            ('shared_conv', self.shared_conv),
+            ('shared_layer1_b', self.shared_layer1_b),
+            ('shared_layer1_t', self.shared_layer1_t),
+            ('shared_layer2_b', self.shared_layer2_b),
+            ('shared_layer2_t', self.shared_layer2_t),
+            ('shared_layer3_b', self.shared_layer3_b),
+            ('shared_layer3_t', self.shared_layer3_t),
+            ('shared_layer4_b', self.shared_layer4_b),
+            ('shared_layer4_t', self.shared_layer4_t),
+            ('encoder_block_att_1', self.encoder_block_att_1),
+            ('encoder_block_att_2', self.encoder_block_att_2),
+            ('encoder_block_att_3', self.encoder_block_att_3),
+        ]
+    
+    def task_specific_modules(self):
+        return [
+            ('encoder_att_1', self.encoder_att_1),
+            ('encoder_att_2', self.encoder_att_2),
+            ('encoder_att_3', self.encoder_att_3),
+            ('encoder_att_4', self.encoder_att_4),
+            ('decoders', self.decoders),
+        ]
 
     def zero_grad_shared_modules(self):
-        for mm in self.shared_modules():
+        for _, mm in self.shared_modules():
             mm.zero_grad()
+    
+    def _get_module_param_names(self, module_name, module):
+        """Recursively get parameter names for a given module with prefix."""
+        param_names = []
+        for name, _ in module.named_parameters(recurse=True):
+            param_names.append(f"{module_name}.{name}")
+        return param_names
+    
+    def _get_module_param_names(self, module_name, module):
+        """Recursively get both parameter and buffer names for a given module with prefix."""
+        param_names = []
+        
+        # Get named parameters (learnable)
+        for name, _ in module.named_parameters(recurse=True):
+            param_names.append(f"{module_name}.{name}")
+        
+        # Get named buffers (e.g., running_mean, running_var in BatchNorm layers)
+        for name, _ in module.named_buffers(recurse=True):
+            param_names.append(f"{module_name}.{name}")
+        
+        return param_names
+    
+    def get_task_specific_module_names(self):
+        task_specific_param_names = []
+        for module_name, module in self.task_specific_modules():
+            task_specific_param_names.extend(self._get_module_param_names(module_name, module))
+        return task_specific_param_names
 
 
 # --------------------------------------------------------------------------------
@@ -250,7 +288,7 @@ class MTANDeepLabv3(nn.Module):
 class MTLDeepLabv3(nn.Module):
     def __init__(self, tasks):
         super(MTLDeepLabv3, self).__init__()
-        backbone = ResnetDilated(resnet.resnet50())
+        backbone = ResnetDilated(resnet.resnet50(weights="IMAGENET1K_V2"))
         ch = [256, 512, 1024, 2048]
 
         self.tasks = tasks
@@ -282,16 +320,45 @@ class MTLDeepLabv3(nn.Module):
                 out[i] = out[i] / torch.norm(out[i], p=2, dim=1, keepdim=True)
         return out
 
-    def shared_modules(self):
-        return [self.shared_conv,
-                self.shared_layer1,
-                self.shared_layer2,
-                self.shared_layer3,
-                self.shared_layer4]
 
+    def shared_modules(self):
+        return [
+            ('shared_conv', self.shared_conv),
+            ('shared_layer1', self.shared_layer1),
+            ('shared_layer2', self.shared_layer2),
+            ('shared_layer3', self.shared_layer3),
+            ('shared_layer4', self.shared_layer4),
+        ]
+    
+    def task_specific_modules(self):
+        return [
+            ('decoders', self.decoders),
+        ]
+    
     def zero_grad_shared_modules(self):
-        for mm in self.shared_modules():
+        for _, mm in self.shared_modules():
             mm.zero_grad()
+    
+    def _get_module_param_names(self, module_name, module):
+        """Recursively get both parameter and buffer names for a given module with prefix."""
+        param_names = []
+        
+        # Get named parameters (learnable)
+        for name, _ in module.named_parameters(recurse=True):
+            param_names.append(f"{module_name}.{name}")
+        
+        # Get named buffers (e.g., running_mean, running_var in BatchNorm layers)
+        for name, _ in module.named_buffers(recurse=True):
+            param_names.append(f"{module_name}.{name}")
+        
+        return param_names
+    
+    def get_task_specific_module_names(self):
+        task_specific_param_names = []
+        for module_name, module in self.task_specific_modules():
+            task_specific_param_names.extend(self._get_module_param_names(module_name, module))
+        return task_specific_param_names
+    
 
 
 # --------------------------------------------------------------------------------

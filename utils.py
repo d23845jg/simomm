@@ -1,16 +1,14 @@
-from copy import deepcopy
-from scipy.optimize import minimize
-
 import torch
 import torch.nn.functional as F
 import numpy as np
+from copy import deepcopy
+from create_network import *
+from scipy.optimize import minimize
 
 
 """
 Define task metrics, loss functions and model trainer here.
 """
-
-
 class ConfMatrix(object):
     """
     For mIoU and other pixel-level classification tasks.
@@ -225,8 +223,6 @@ class TaskMetric:
 Define Gradient-based frameworks here. 
 Based on https://github.com/Cranial-XIX/CAGrad/blob/main/cityscapes/utils.py
 """
-
-
 def graddrop(grads):
     P = 0.5 * (1. + grads.sum(1) / (grads.abs().sum(1) + 1e-8))
     U = torch.rand_like(grads[:, 0])
@@ -311,3 +307,26 @@ def overwrite_grad(m, newgrad, grad_dims, num_tasks):
             this_grad = newgrad[beg: en].contiguous().view(param.data.size())
             param.grad = this_grad.data.clone()
             cnt += 1
+
+
+
+"""
+Define model saving and loading functions here.
+"""
+def torch_save(model, filename):
+    metadata = {
+        "model_class": model.__class__.__name__,
+        "tasks": model.tasks,
+        "state_dict": model.state_dict(),
+    }
+    torch.save(metadata, filename)
+
+def torch_load(filename):
+    metadata = torch.load(filename, map_location="cpu")
+    model_class_name = metadata["model_class"]
+    tasks = metadata["tasks"]
+    state_dict = metadata["state_dict"]
+    
+    model = globals()[model_class_name](tasks)
+    model.load_state_dict(state_dict)
+    return model

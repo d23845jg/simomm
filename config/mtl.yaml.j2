@@ -1,0 +1,37 @@
+dataset_paths:
+  nyuv2: "dataset/nyuv2"
+  cityscapes: "dataset/cityscapes"
+
+training_params:
+  mode: "none"
+  port: "none"
+
+  # Model parameters
+  task: "all" # primary tasks, use "all" for MTL setting
+  dataset: "nyuv2" # nyuv2, cityscapes
+  network: "split" # split, mtan
+  weight: "equal" # equal, dwa, uncert, autol
+  grad_method: "none" # graddrop, pcgrad, cagrad
+  with_noise: false # with noise prediction task
+
+  # Training parameters
+  total_epochs: 1
+  batch_size: 4
+  gpu: 0 # gpu ID
+  seed: 42
+
+  # Auto-lambda specific
+  autol_init: 0.1 # initialisation for auto-lambda
+  autol_lr: 1e-4 # learning rate for auto-lambda
+
+model_merging:
+  method: "sum"
+
+# Include other YAML configurations
+{% include "config/model_merging/average.yaml.j2" %}
+{% include "config/model_merging/consensus.yaml.j2" %}
+{% include "config/model_merging/mag_masking.yaml.j2" %}
+{% include "config/model_merging/sum.yaml.j2" %}
+{% include "config/model_merging/tall_mask.yaml.j2" %}
+{% include "config/model_merging/ties.yaml.j2" %}
+{% include "config/model_merging/zeroshot.yaml.j2" %}
