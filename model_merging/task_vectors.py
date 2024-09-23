@@ -14,8 +14,8 @@ def symmetric_difference(A, B):
 class _TaskVector():
     def __init__(
         self,
-        pretrained_state_dict: dict = None,
-        finetuned_state_dict: dict = None,
+        pretrained_state_dict=None,
+        finetuned_state_dict=None,
         vector=None,
     ):
         """Initializes the task vector from a pretrained and a finetuned checkpoints.
@@ -103,6 +103,7 @@ class _TaskVector():
         """Norm of a task vector."""
         return torch.sqrt(self.dot(self))
 
+    # TODO: change this so the tv is only applied in the shared layers of the pt model
     def apply_to(self, pretrained_checkpoint, scaling_coef=1.0):
         """Apply a task vector to a pretrained model."""
         with torch.no_grad():
@@ -127,7 +128,7 @@ class MTLTaskVector(_TaskVector):
         vector=None,
     ):
         if vector is not None:
-            super().__init__(pretrained_state_dict, finetuned_state_dict, vector)
+            super().__init__(None, None, vector)
         else:
             assert pretrained_checkpoint is not None and finetuned_checkpoint is not None
             with torch.no_grad():
@@ -137,9 +138,10 @@ class MTLTaskVector(_TaskVector):
 
                 # parse finetuned_checkpoint
                 finetuned_model = self._safe_load(finetuned_checkpoint)
+                self.tasks = finetuned_model.tasks
                 finetuned_state_dict = {k: v for k, v in finetuned_model.state_dict().items() if k not in set(finetuned_model.get_task_specific_module_names())}
 
-                super().__init__(pretrained_state_dict, finetuned_state_dict, vector)
+                super().__init__(pretrained_state_dict, finetuned_state_dict, None)
 
     def _safe_load(self, checkpoint):
         if isinstance(checkpoint, str):
