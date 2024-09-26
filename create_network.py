@@ -146,10 +146,10 @@ class MTANDeepLabv3(nn.Module):
         self.shared_layer4_t = backbone.layer4[-1]
 
         # Define task specific attention modules using a similar bottleneck design in residual block
-        self.encoder_att_1 = nn.ModuleList([self.att_layer(ch[0], ch[0] // 4, ch[0]) for _ in self.tasks])
-        self.encoder_att_2 = nn.ModuleList([self.att_layer(2 * ch[1], ch[1] // 4, ch[1]) for _ in self.tasks])
-        self.encoder_att_3 = nn.ModuleList([self.att_layer(2 * ch[2], ch[2] // 4, ch[2]) for _ in self.tasks])
-        self.encoder_att_4 = nn.ModuleList([self.att_layer(2 * ch[3], ch[3] // 4, ch[3]) for _ in self.tasks])
+        self.encoder_att_1 = nn.ModuleDict({task: self.att_layer(ch[0], ch[0] // 4, ch[0]) for task in self.tasks})
+        self.encoder_att_2 = nn.ModuleDict({task: self.att_layer(2 * ch[1], ch[1] // 4, ch[1]) for task in self.tasks})
+        self.encoder_att_3 = nn.ModuleDict({task: self.att_layer(2 * ch[2], ch[2] // 4, ch[2]) for task in self.tasks})
+        self.encoder_att_4 = nn.ModuleDict({task: self.att_layer(2 * ch[3], ch[3] // 4, ch[3]) for task in self.tasks})
 
         # Define task shared attention encoders using residual bottleneck layers
         self.encoder_block_att_1 = self.conv_layer(ch[0], ch[1] // 4)
@@ -159,7 +159,7 @@ class MTANDeepLabv3(nn.Module):
         self.down_sampling = nn.MaxPool2d(kernel_size=2, stride=2)
 
         # Define task-specific decoders using ASPP modules
-        self.decoders = nn.ModuleList([DeepLabHead(ch[-1], self.tasks[t]) for t in self.tasks])
+        self.decoders = nn.ModuleDict({task: DeepLabHead(ch[-1], self.tasks[task]) for task in self.tasks})
 
     def att_layer(self, in_channel, intermediate_channel, out_channel):
         return nn.Sequential(
@@ -199,87 +199,51 @@ class MTANDeepLabv3(nn.Module):
         u_4_t = self.shared_layer4_t(u_4_b)
 
         # Attention block 1 -> Apply attention over last residual block
-        a_1_mask = [att_i(u_1_b) for att_i in self.encoder_att_1]  # Generate task specific attention map
+        a_1_mask = [att_i(u_1_b) for att_i in self.encoder_att_1.values()]  # Generate task specific attention map
         a_1 = [a_1_mask_i * u_1_t for a_1_mask_i in a_1_mask]  # Apply task specific attention map to shared features
         a_1 = [self.down_sampling(self.encoder_block_att_1(a_1_i)) for a_1_i in a_1]
 
         # Attention block 2 -> Apply attention over last residual block
-        a_2_mask = [att_i(torch.cat((u_2_b, a_1_i), dim=1)) for a_1_i, att_i in zip(a_1, self.encoder_att_2)]
+        a_2_mask = [att_i(torch.cat((u_2_b, a_1_i), dim=1)) for a_1_i, att_i in zip(a_1, self.encoder_att_2.values())]
         a_2 = [a_2_mask_i * u_2_t for a_2_mask_i in a_2_mask]
         a_2 = [self.encoder_block_att_2(a_2_i) for a_2_i in a_2]
 
         # Attention block 3 -> Apply attention over last residual block
-        a_3_mask = [att_i(torch.cat((u_3_b, a_2_i), dim=1)) for a_2_i, att_i in zip(a_2, self.encoder_att_3)]
+        a_3_mask = [att_i(torch.cat((u_3_b, a_2_i), dim=1)) for a_2_i, att_i in zip(a_2, self.encoder_att_3.values())]
         a_3 = [a_3_mask_i * u_3_t for a_3_mask_i in a_3_mask]
         a_3 = [self.encoder_block_att_3(a_3_i) for a_3_i in a_3]
 
         # Attention block 4 -> Apply attention over last residual block (without final encoder)
-        a_4_mask = [att_i(torch.cat((u_4_b, a_3_i), dim=1)) for a_3_i, att_i in zip(a_3, self.encoder_att_4)]
+        a_4_mask = [att_i(torch.cat((u_4_b, a_3_i), dim=1)) for a_3_i, att_i in zip(a_3, self.encoder_att_4.values())]
         a_4 = [a_4_mask_i * u_4_t for a_4_mask_i in a_4_mask]
 
         # Task specific decoders
         out = [0 for _ in self.tasks]
         for i, t in enumerate(self.tasks):
-            out[i] = F.interpolate(self.decoders[i](a_4[i]), size=[im_h, im_w], mode='bilinear', align_corners=True)
+            out[i] = F.interpolate(self.decoders[t](a_4[i]), size=[im_h, im_w], mode='bilinear', align_corners=True)
             if t == 'normal':
                 out[i] = out[i] / torch.norm(out[i], p=2, dim=1, keepdim=True)
         return out
 
     def shared_modules(self):
         return [
-            ('shared_conv', self.shared_conv),
-            ('shared_layer1_b', self.shared_layer1_b),
-            ('shared_layer1_t', self.shared_layer1_t),
-            ('shared_layer2_b', self.shared_layer2_b),
-            ('shared_layer2_t', self.shared_layer2_t),
-            ('shared_layer3_b', self.shared_layer3_b),
-            ('shared_layer3_t', self.shared_layer3_t),
-            ('shared_layer4_b', self.shared_layer4_b),
-            ('shared_layer4_t', self.shared_layer4_t),
-            ('encoder_block_att_1', self.encoder_block_att_1),
-            ('encoder_block_att_2', self.encoder_block_att_2),
-            ('encoder_block_att_3', self.encoder_block_att_3),
-        ]
-    
-    def task_specific_modules(self):
-        return [
-            ('encoder_att_1', self.encoder_att_1),
-            ('encoder_att_2', self.encoder_att_2),
-            ('encoder_att_3', self.encoder_att_3),
-            ('encoder_att_4', self.encoder_att_4),
-            ('decoders', self.decoders),
+            self.shared_conv,
+            self.shared_layer1_b,
+            self.shared_layer1_t,
+            self.shared_layer2_b,
+            self.shared_layer2_t,
+            self.shared_layer3_b,
+            self.shared_layer3_t,
+            self.shared_layer4_b,
+            self.shared_layer4_t,
+            self.encoder_block_att_1,
+            self.encoder_block_att_2,
+            self.encoder_block_att_3,
         ]
 
     def zero_grad_shared_modules(self):
-        for _, mm in self.shared_modules():
+        for mm in self.shared_modules():
             mm.zero_grad()
-    
-    def _get_module_param_names(self, module_name, module):
-        """Recursively get parameter names for a given module with prefix."""
-        param_names = []
-        for name, _ in module.named_parameters(recurse=True):
-            param_names.append(f"{module_name}.{name}")
-        return param_names
-    
-    def _get_module_param_names(self, module_name, module):
-        """Recursively get both parameter and buffer names for a given module with prefix."""
-        param_names = []
-        
-        # Get named parameters (learnable)
-        for name, _ in module.named_parameters(recurse=True):
-            param_names.append(f"{module_name}.{name}")
-        
-        # Get named buffers (e.g., running_mean, running_var in BatchNorm layers)
-        for name, _ in module.named_buffers(recurse=True):
-            param_names.append(f"{module_name}.{name}")
-        
-        return param_names
-    
-    def get_task_specific_module_names(self):
-        task_specific_param_names = []
-        for module_name, module in self.task_specific_modules():
-            task_specific_param_names.extend(self._get_module_param_names(module_name, module))
-        return task_specific_param_names
 
 
 # --------------------------------------------------------------------------------
@@ -300,7 +264,7 @@ class MTLDeepLabv3(nn.Module):
         self.shared_layer4 = backbone.layer4
 
         # Define task-specific decoders using ASPP modules
-        self.decoders = nn.ModuleList([DeepLabHead(ch[-1], self.tasks[t]) for t in self.tasks])
+        self.decoders = nn.ModuleDict({task: DeepLabHead(ch[-1], self.tasks[task]) for task in self.tasks})
 
     def forward(self, x):
         _, _, im_h, im_w = x.shape
@@ -315,7 +279,7 @@ class MTLDeepLabv3(nn.Module):
         # Task specific decoders
         out = [0 for _ in self.tasks]
         for i, t in enumerate(self.tasks):
-            out[i] = F.interpolate(self.decoders[i](x), size=[im_h, im_w], mode='bilinear', align_corners=True)
+            out[i] = F.interpolate(self.decoders[t](x), size=[im_h, im_w], mode='bilinear', align_corners=True)
             if t == 'normal':
                 out[i] = out[i] / torch.norm(out[i], p=2, dim=1, keepdim=True)
         return out
@@ -323,42 +287,15 @@ class MTLDeepLabv3(nn.Module):
 
     def shared_modules(self):
         return [
-            ('shared_conv', self.shared_conv),
-            ('shared_layer1', self.shared_layer1),
-            ('shared_layer2', self.shared_layer2),
-            ('shared_layer3', self.shared_layer3),
-            ('shared_layer4', self.shared_layer4),
-        ]
-    
-    def task_specific_modules(self):
-        return [
-            ('decoders', self.decoders),
+            self.shared_conv,
+            self.shared_layer1,
+            self.shared_layer2,
+            self.shared_layer3,
         ]
     
     def zero_grad_shared_modules(self):
-        for _, mm in self.shared_modules():
+        for mm in self.shared_modules():
             mm.zero_grad()
-    
-    def _get_module_param_names(self, module_name, module):
-        """Recursively get both parameter and buffer names for a given module with prefix."""
-        param_names = []
-        
-        # Get named parameters (learnable)
-        for name, _ in module.named_parameters(recurse=True):
-            param_names.append(f"{module_name}.{name}")
-        
-        # Get named buffers (e.g., running_mean, running_var in BatchNorm layers)
-        for name, _ in module.named_buffers(recurse=True):
-            param_names.append(f"{module_name}.{name}")
-        
-        return param_names
-    
-    def get_task_specific_module_names(self):
-        task_specific_param_names = []
-        for module_name, module in self.task_specific_modules():
-            task_specific_param_names.extend(self._get_module_param_names(module_name, module))
-        return task_specific_param_names
-    
 
 
 # --------------------------------------------------------------------------------

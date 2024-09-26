@@ -7,10 +7,10 @@ training_params:
   port: "none"
 
   # Model parameters
-  task: "all" # primary tasks, use "all" for MTL setting
+  task: "all" # all, seg, depth, normal
   dataset: "nyuv2" # nyuv2, cityscapes
   network: "split" # split, mtan
-  weight: "equal" # equal, dwa, uncert, autol
+  weight: "equal" # equal, dwa, uncert
   grad_method: "none" # graddrop, pcgrad, cagrad
   with_noise: false # with noise prediction task
 
@@ -29,9 +29,11 @@ model_merging:
   pt_model_file: "models/mtl_model.pt"
   ft_model_files:
     - "models/seg_model.pt"
-    - "models/depth_model.pt"
   dataset: "nyuv2" # nyuv2, cityscapes
   network: "split" # split, mtan
+  
+  num_tv_coef_points: 21
+  specify_lambda: None
 
 # Include other YAML configurations
 {% include "config/model_merging/average.yaml.j2" %}

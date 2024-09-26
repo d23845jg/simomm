@@ -16,7 +16,8 @@ class _TaskVector():
         self,
         pretrained_state_dict=None,
         finetuned_state_dict=None,
-        vector=None,
+        theta=None,
+        tau=None,
     ):
         """Initializes the task vector from a pretrained and a finetuned checkpoints.
 
@@ -24,35 +25,31 @@ class _TaskVector():
         pretrained model, and another to the finetuned model), or by directly passying in
         the task vector state dict.
         """
-        # self.model_name = model_name
-        if vector is not None:
-            self.vector = vector
+        if theta is not None:
+            self.theta = theta
         else:
             assert pretrained_state_dict is not None and finetuned_state_dict is not None
-
-            # if "model_name" in finetuned_state_dict.keys():
-            #     finetuned_state_dict.pop("model_name")
 
             # the final task vector is the difference between finetuned and pretrained vectors.
             assert (pretrained_state_dict.keys() == finetuned_state_dict.keys()), f"State dicts have different keys: {symmetric_difference(pretrained_state_dict.keys(), finetuned_state_dict.keys())}."
             
-            self.vector = {}
+            self.theta = {}
             for key in pretrained_state_dict:
                 if pretrained_state_dict[key].dtype == torch.int64:
                     continue
                 if pretrained_state_dict[key].dtype == torch.uint8:
                     continue
-                self.vector[key] = finetuned_state_dict[key] - pretrained_state_dict[key]
+                self.theta[key] = finetuned_state_dict[key] - pretrained_state_dict[key]
 
     def __add__(self, other):
         """Add two task vectors together."""
         with torch.no_grad():
             new_vector = {}
-            for key in self.vector:
-                if key not in other.vector:
+            for key in self.theta:
+                if key not in other.theta:
                     print(f"Warning, key {key} is not present in both task vectors.")
                     continue
-                new_vector[key] = self.vector[key] + other.vector[key]
+                new_vector[key] = self.theta[key] + other.theta[key]
         return self.__class__(vector=new_vector)
 
     def __sub__(self, other):
@@ -68,80 +65,100 @@ class _TaskVector():
         """Negate a task vector."""
         with torch.no_grad():
             new_vector = {}
-            for key in self.vector:
-                new_vector[key] = -self.vector[key]
+            for key in self.theta:
+                new_vector[key] = -self.theta[key]
         return self.__class__(vector=new_vector)
 
     def __pow__(self, power):
         """Power of a task vector."""
         with torch.no_grad():
             new_vector = {}
-            for key in self.vector:
-                new_vector[key] = self.vector[key] ** power
+            for key in self.theta:
+                new_vector[key] = self.theta[key] ** power
         return self.__class__(vector=new_vector)
 
     def __mul__(self, other):
         """Multiply a task vector by a scalar."""
         with torch.no_grad():
             new_vector = {}
-            for key in self.vector:
-                new_vector[key] = other * self.vector[key]
+            for key in self.theta:
+                new_vector[key] = other * self.theta[key]
         return self.__class__(vector=new_vector)
 
     def dot(self, other):
         """Dot product of two task vectors."""
         with torch.no_grad():
             dot_product = 0.0
-            for key in self.vector:
-                if key not in other.vector:
+            for key in self.theta:
+                if key not in other.theta:
                     print(f"Warning, key {key} is not present in both task vectors.")
                     continue
-                dot_product += torch.sum(self.vector[key] * other.vector[key])
+                dot_product += torch.sum(self.theta[key] * other.theta[key])
         return dot_product
 
     def norm(self):
         """Norm of a task vector."""
         return torch.sqrt(self.dot(self))
+    
+    # def apply_to(self, pretrained_checkpoint, scaling_coef=1.0):
+    #     """Apply a task vector to a pretrained model."""
+    #     with torch.no_grad():
+    #         pretrained_model = self._load_checkpoint(pretrained_checkpoint)
+    #         pretrained_state_dict = pretrained_model.state_dict()
 
-    # TODO: change this so the tv is only applied in the shared layers of the pt model
-    def apply_to(self, pretrained_checkpoint, scaling_coef=1.0):
-        """Apply a task vector to a pretrained model."""
-        with torch.no_grad():
-            pretrained_model = self._load_checkpoint(pretrained_checkpoint)
-            new_state_dict = {}
-            pretrained_state_dict = pretrained_model.state_dict()
-            for key in pretrained_state_dict:
-                if key not in self.vector:
-                    print(
-                        f"Warning: key {key} is present in the pretrained state dict but not in the task vector"  # noqa: E501
-                    )
-                    continue
-                new_state_dict[key] = pretrained_state_dict[key] + scaling_coef * self.vector[key]
-        pretrained_model.load_state_dict(new_state_dict)
-        return pretrained_model
+    #         missing_keys = []
+            
+    #         for key, param in pretrained_state_dict.items():
+    #             vector_value = self.theta.get(key)
+    #             if vector_value is None:
+    #                 missing_keys.append(key)
+    #             else:
+    #                 # In-place addition for efficiency
+    #                 param.add_(scaling_coef * vector_value)
+
+    #         if missing_keys:
+    #             print(f"Warning: the following keys are present in the pretrained state dict but not in the task vector: {missing_keys}")  # noqa: E501
+            
+    #         pretrained_model.load_state_dict(pretrained_state_dict)        
+    #     return pretrained_model
+
+
 
 class MTLTaskVector(_TaskVector):
     def __init__(
         self,
         pretrained_checkpoint: _Checkpoint = None,
         finetuned_checkpoint: _Checkpoint = None,
-        vector=None,
+        theta=None,
+        tau=None,
     ):
-        if vector is not None:
-            super().__init__(None, None, vector)
+        if theta is not None and tau is not None:
+            super().__init__(None, None, theta, None)
+            self.tau = tau
         else:
             assert pretrained_checkpoint is not None and finetuned_checkpoint is not None
             with torch.no_grad():
-                # parse pretrained_checkpoint
                 pretrained_model = self._safe_load(pretrained_checkpoint)
-                pretrained_state_dict = {k: v for k, v in pretrained_model.state_dict().items() if k not in set(pretrained_model.get_task_specific_module_names())}
-
-                # parse finetuned_checkpoint
                 finetuned_model = self._safe_load(finetuned_checkpoint)
                 self.tasks = finetuned_model.tasks
-                finetuned_state_dict = {k: v for k, v in finetuned_model.state_dict().items() if k not in set(finetuned_model.get_task_specific_module_names())}
+
+                # parse pretrained_checkpoint
+                pretrained_state_dict = {
+                    k: v for k, v in pretrained_model.state_dict().items()
+                    if not any(task in k for task in pretrained_model.tasks)
+                }
+
+                # parse finetuned_checkpoint
+                finetuned_state_dict = {}
+                task_specific_state_dict = {}
+                for k, v in finetuned_model.state_dict().items():
+                    if any(task in k for task in self.tasks):
+                        task_specific_state_dict[k] = v
+                    else:
+                        finetuned_state_dict[k] = v
 
                 super().__init__(pretrained_state_dict, finetuned_state_dict, None)
+                self.tau = task_specific_state_dict
 
     def _safe_load(self, checkpoint):
         if isinstance(checkpoint, str):
@@ -150,3 +167,36 @@ class MTLTaskVector(_TaskVector):
             return checkpoint
         else:
             raise ValueError(f"Invalid type for checkpoint: {type(checkpoint)}")
+
+    def apply_to(self, pretrained_checkpoint, scaling_coef=1.0):
+        """Apply a task vector to a pretrained model."""
+        with torch.no_grad():
+            pt_model = self._safe_load(pretrained_checkpoint)
+
+            updates = {}
+            pt_model_state_dict = pt_model.state_dict()
+            
+            missing_keys = []
+            for param_name in self.theta:
+                # Skip task-specific module names
+                # if any(task in key for task in pt_model.tasks.keys()):
+                #     continue
+
+                param_value = self.theta.get(param_name)
+                if param_value is None:
+                    missing_keys.append(param_name)
+                    continue
+                
+                # Efficient in-place addition
+                # param.add_(scaling_coef * vector_value)
+                updates[param_name]  = pt_model_state_dict[param_name] + scaling_coef * param_value
+                # updates[param_name] = pt_model_state_dict[param_name] + 1 * param_value
+            
+            # Log missing keys if any
+            if missing_keys:
+                print(f"Warning: the following keys are present in the pretrained state dict but not in the task vector: {missing_keys}")
+            
+            # Load updated state dict into the model
+            pt_model.load_state_dict({**pt_model.state_dict(), **updates, **self.tau})
+        
+        return pt_model

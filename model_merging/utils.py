@@ -1,6 +1,7 @@
 import copy
 import torch
 from collections import OrderedDict
+from itertools import chain
 from model_merging.task_vectors import MTLTaskVector
 
 # from model_merging.tallmask_utils import construct_consensus_mask, construct_tall_mask, load_tall_mask
@@ -81,7 +82,7 @@ def topk_values_mask(M, K=0.7, return_mask=False, reshape_mask=False):
 def aggregate_task_vectors(task_vectors, mm_config):
     # Flattening out Checkpoints
     remove_keys = []
-    flat_task_vectors = torch.vstack([state_dict_to_vector(state_dict.vector, remove_keys) for state_dict in task_vectors])
+    flat_task_vectors = torch.vstack([state_dict_to_vector(task_vector.theta, remove_keys) for task_vector in task_vectors])
 
     # Aggregate Task Vectors
     merge_method = mm_config["model_merging"]["method"]
@@ -138,15 +139,11 @@ def aggregate_task_vectors(task_vectors, mm_config):
     else:
         raise ValueError(f"Method {mm_config['model_merging']['name']} not defined.")
 
-    merged_tv_state_dict = vector_to_state_dict(merged_tv, task_vectors[0].vector, remove_keys=remove_keys)
-    mtl_task_vector = MTLTaskVector(vector=merged_tv_state_dict)
-    mtl_task_vector.tasks = {k: v for task_vector in task_vectors for k, v in task_vector.tasks.items()} # Assume one ft model for each task (e.g. there can't be two seg tasks)
-    
-    print("Norm of multi-task task vector: ", mtl_task_vector.norm())
-
-
-    # task_vector = NonLinearTaskVector(model_name=mm_config.model, vector=merged_tv_state_dict)
-    # print("Norm of task vector: ", task_vector.norm())
+    shared_tv_state_dict = vector_to_state_dict(merged_tv, task_vectors[0].theta, remove_keys=remove_keys)
+    task_specific_tv_state_dict = dict(chain(*(task_vector.tau.items() for task_vector in task_vectors)))
+    mtl_task_vector = MTLTaskVector(theta=shared_tv_state_dict, tau=task_specific_tv_state_dict)
+    mtl_task_vector.tasks = dict(chain(*(task_vector.tasks.items() for task_vector in task_vectors))) # Assume one ft model for each task (e.g. there can't be two seg tasks)
+    print("Norm of shared task vector: ", mtl_task_vector.norm())
 
     # if merge_config["name"] not in ["tall_mask", "mag_masking"]:
     #     eval_masks = None
