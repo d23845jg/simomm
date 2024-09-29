@@ -3,7 +3,7 @@ from create_network import *
 from typing import Union
 from utils import torch_load
 
-_Checkpoint = Union[str, torch.nn.Module]
+_Checkpoint = Union[str, nn.Module]
 
 
 def symmetric_difference(A, B):
@@ -99,29 +99,6 @@ class _TaskVector():
     def norm(self):
         """Norm of a task vector."""
         return torch.sqrt(self.dot(self))
-    
-    # def apply_to(self, pretrained_checkpoint, scaling_coef=1.0):
-    #     """Apply a task vector to a pretrained model."""
-    #     with torch.no_grad():
-    #         pretrained_model = self._load_checkpoint(pretrained_checkpoint)
-    #         pretrained_state_dict = pretrained_model.state_dict()
-
-    #         missing_keys = []
-            
-    #         for key, param in pretrained_state_dict.items():
-    #             vector_value = self.theta.get(key)
-    #             if vector_value is None:
-    #                 missing_keys.append(key)
-    #             else:
-    #                 # In-place addition for efficiency
-    #                 param.add_(scaling_coef * vector_value)
-
-    #         if missing_keys:
-    #             print(f"Warning: the following keys are present in the pretrained state dict but not in the task vector: {missing_keys}")  # noqa: E501
-            
-    #         pretrained_model.load_state_dict(pretrained_state_dict)        
-    #     return pretrained_model
-
 
 
 class MTLTaskVector(_TaskVector):
@@ -163,8 +140,12 @@ class MTLTaskVector(_TaskVector):
     def _safe_load(self, checkpoint):
         if isinstance(checkpoint, str):
             return torch_load(checkpoint)
-        elif isinstance(checkpoint, torch.nn.Module):
-            return checkpoint
+        elif isinstance(checkpoint, nn.Module):
+            # Create a new model with the same architecture
+            model_class_name = checkpoint.__class__.__name__
+            new_model = globals()[model_class_name](checkpoint.tasks)
+            new_model.load_state_dict(checkpoint.state_dict())
+            return new_model
         else:
             raise ValueError(f"Invalid type for checkpoint: {type(checkpoint)}")
 
@@ -173,7 +154,7 @@ class MTLTaskVector(_TaskVector):
         with torch.no_grad():
             pt_model = self._safe_load(pretrained_checkpoint)
 
-            updates = {}
+            # updates = {}
             pt_model_state_dict = pt_model.state_dict()
             
             missing_keys = []
@@ -188,15 +169,15 @@ class MTLTaskVector(_TaskVector):
                     continue
                 
                 # Efficient in-place addition
-                # param.add_(scaling_coef * vector_value)
-                updates[param_name]  = pt_model_state_dict[param_name] + scaling_coef * param_value
-                # updates[param_name] = pt_model_state_dict[param_name] + 1 * param_value
+                pt_model_state_dict[param_name].add_(scaling_coef * param_value)
+                # updates[param_name]  = pt_model_state_dict[param_name] + scaling_coef * param_value
             
             # Log missing keys if any
             if missing_keys:
                 print(f"Warning: the following keys are present in the pretrained state dict but not in the task vector: {missing_keys}")
             
             # Load updated state dict into the model
-            pt_model.load_state_dict({**pt_model.state_dict(), **updates, **self.tau})
+            # pt_model.load_state_dict({**pt_model.state_dict(), **updates, **self.tau})
+            pt_model.load_state_dict({**pt_model.state_dict(), **self.tau})
         
         return pt_model

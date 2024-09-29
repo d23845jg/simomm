@@ -7,7 +7,7 @@ training_params:
   port: "none"
 
   # Model parameters
-  task: "all" # all, seg, depth, normal
+  task: "seg" # all, seg, depth, normal
   dataset: "nyuv2" # nyuv2, cityscapes
   network: "split" # split, mtan
   weight: "equal" # equal, dwa, uncert
@@ -15,14 +15,10 @@ training_params:
   with_noise: false # with noise prediction task
 
   # Training parameters
-  total_epochs: 1
-  batch_size: 4
-  gpu: 0 # gpu ID
+  total_epochs: 1 # set it to 1 for model merging
+  batch_size: 8
+  gpu: 1 # gpu ID
   seed: 42
-
-  # Auto-lambda specific
-  autol_init: 0.1 # initialisation for auto-lambda
-  autol_lr: 1e-4 # learning rate for auto-lambda
 
 model_merging:
   method: "sum"
@@ -32,7 +28,7 @@ model_merging:
   dataset: "nyuv2" # nyuv2, cityscapes
   network: "split" # split, mtan
   
-  num_tv_coef_points: 21
+  num_tv_coef_points: 2
   specify_lambda: None
 
 # Include other YAML configurations

@@ -4,27 +4,9 @@ import time
 import torch
 from typing import Union, Dict, Any, Optional
 from model_merging.task_vectors import MTLTaskVector
-from utils import get_data_loaders, TaskMetric#, compute_loss
+from utils import get_data_loaders, TaskMetric, compute_loss
 
 _Checkpoint = Union[str, torch.nn.Module]
-
-
-from torch.nn import functional as F
-def compute_loss(pred, gt, task_id):
-    """
-    Compute task-specific loss.
-    """
-    if task_id in ['seg', 'part_seg'] or 'class' in task_id:
-        # Cross Entropy Loss with Ignored Index (values are -1)
-        loss = F.cross_entropy(pred, gt, ignore_index=-1)
-
-    if task_id in ['normal', 'depth', 'disp', 'noise']:
-        # L1 Loss with Ignored Region (values are 0 or -1)
-        invalid_idx = -1 if task_id == 'disp' else 0
-        valid_mask = (torch.sum(gt, dim=1, keepdim=True) != invalid_idx).to(pred.device)
-        loss = torch.sum(F.l1_loss(pred, gt, reduction='none').masked_select(valid_mask)) \
-                / torch.nonzero(valid_mask, as_tuple=False).size(0)
-    return loss
 
 
 def eval(
@@ -51,19 +33,14 @@ def eval(
 
             test_pred = model(data)
 
-            for i, task_id in enumerate(model.tasks):
-                print(f"Task: {task_id}")
-                print(compute_loss(test_pred[i], target[task_id], task_id))
-
             test_loss = [compute_loss(test_pred[i], target[task_id], task_id) for i, task_id in enumerate(model.tasks)]
-
             test_metric.update_metric(test_pred, target, test_loss)
 
-            if k==3:
+            # TODO: remove this
+            if k==2:
                 break
 
     test_str = test_metric.compute_metric()
-    print(test_str)
     test_metric.reset()
     return test_metric.metric, test_str
 
@@ -104,7 +81,6 @@ def evaluate_task_vector_at_coef(
     else:
         model = task_vector.apply_to(pt_checkpoint, scaling_coef=scaling_coef)
         model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
-        # model = pt_checkpoint
 
     # if eval_masks != None:
     #     sparse_task_vector = copy.deepcopy(task_vector)
@@ -117,7 +93,6 @@ def evaluate_task_vector_at_coef(
 
     coef_metrics, _ = eval(model, config, use_val_dataset, model_merging=True)
     coef_metrics = add_normalized_accuracy(coef_metrics, config)
-
     print(f"Total evaluation time: {time.time() - start_time:.2f}s")
     return coef_metrics
 
@@ -148,7 +123,7 @@ def evaluate_task_vector(
             info["loaded_mask"] = evaluate_task_vector_at_coef(
                 pt_checkpoint, task_vector, config, 1.0, use_val_dataset, eval_masks,
             )
-            print(f"Delta MTL: {round(info['loaded_mask']['all'][0] * 100, 2)}")
+            print(f"Delta MTL: {round(info['loaded_mask']['all'][0] * 100, 2)}%")
         else:
             for tall_mask_lambda in [0.2, 0.3, 0.4, 0.5, 0.6]:
                 print("\n" * 2)
@@ -156,7 +131,7 @@ def evaluate_task_vector(
                 info[tall_mask_lambda] = evaluate_task_vector_at_coef(
                     pt_checkpoint, task_vector, config, 1.0, use_val_dataset, eval_masks[tall_mask_lambda],
                 )
-                print(f"Delta MTL: {round(info[tall_mask_lambda]['all'][0] * 100, 2)}")
+                print(f"Delta MTL: {round(info[tall_mask_lambda]['all'][0] * 100, 2)}%")
     else:
         for scaling_coef in scaling_coef_range:
             print("\n" * 2)
@@ -164,7 +139,7 @@ def evaluate_task_vector(
             info[scaling_coef] = evaluate_task_vector_at_coef(
                 pt_checkpoint, task_vector, config, scaling_coef, use_val_dataset, eval_masks
             )
-            print(f"Delta MTL: {round(info[scaling_coef]['all'][0] * 100, 2)}")
+            print(f"Delta MTL: {round(info[scaling_coef]['all'][0] * 100, 2)}%")
 
     return info
 
@@ -221,8 +196,9 @@ def perform_eval_with_merged_vector(
 
     # evaluate on validation set
     # val_metrics = evaluate_task_vector(pt_checkpoint, task_vector, config, use_val_dataset=True, eval_masks=eval_masks)
+    # TODO: remove this
     val_metrics = evaluate_task_vector(pt_checkpoint, task_vector, config, use_val_dataset=False, eval_masks=eval_masks)
-
+    
     if config["model_merging"]["method"] == "tall_mask":
         if config["tall_mask"]["load_mask"]:
             best_masks_for_test = eval_masks
@@ -251,10 +227,10 @@ def perform_eval_with_merged_vector(
         )
 
     print("=" * 100)
-    print(f"Test normalized accuracy: {test_metrics['avg_normalized_top1']}")
-    print(f"Test absolute accuracy: {test_metrics['avg_top1']}")
+    for task_id, value in test_metrics.items():
+        print(f"Test normalized metric for {task_id}: {value[-1]}")
+    
     final_results = {"test": test_metrics, "val": val_metrics, "val_best": best_val_metrics}
-
     # log_results(final_results, args)
 
     return final_results
