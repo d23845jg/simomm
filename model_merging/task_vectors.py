@@ -157,27 +157,14 @@ class MTLTaskVector(_TaskVector):
             # updates = {}
             pt_model_state_dict = pt_model.state_dict()
             
-            missing_keys = []
-            for param_name in self.theta:
-                # Skip task-specific module names
-                # if any(task in key for task in pt_model.tasks.keys()):
-                #     continue
-
-                param_value = self.theta.get(param_name)
-                if param_value is None:
-                    missing_keys.append(param_name)
-                    continue
+            for param_name, param_value in self.theta.items():
                 
                 # Efficient in-place addition
                 pt_model_state_dict[param_name].add_(scaling_coef * param_value)
                 # updates[param_name]  = pt_model_state_dict[param_name] + scaling_coef * param_value
             
-            # Log missing keys if any
-            if missing_keys:
-                print(f"Warning: the following keys are present in the pretrained state dict but not in the task vector: {missing_keys}")
-            
             # Load updated state dict into the model
             # pt_model.load_state_dict({**pt_model.state_dict(), **updates, **self.tau})
-            pt_model.load_state_dict({**pt_model.state_dict(), **self.tau})
+            pt_model.load_state_dict({**pt_model.state_dict(), **self.tau}, strict=False)
         
         return pt_model

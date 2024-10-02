@@ -7,7 +7,7 @@ training_params:
   port: "none"
 
   # Model parameters
-  task: "seg" # all, seg, depth, normal
+  task: "all" # all, seg, depth, normal
   dataset: "nyuv2" # nyuv2, cityscapes
   network: "split" # split, mtan
   weight: "equal" # equal, dwa, uncert
@@ -15,7 +15,7 @@ training_params:
   with_noise: false # with noise prediction task
 
   # Training parameters
-  total_epochs: 1 # set it to 1 for model merging
+  total_epochs: 50
   batch_size: 8
   gpu: 1 # gpu ID
   seed: 42
@@ -25,10 +25,11 @@ model_merging:
   pt_model_file: "models/mtl_model.pt"
   ft_model_files:
     - "models/seg_model.pt"
+    - "models/depth_model.pt"
   dataset: "nyuv2" # nyuv2, cityscapes
   network: "split" # split, mtan
   
-  num_tv_coef_points: 2
+  num_tv_coef_points: 5
   specify_lambda: None
 
 # Include other YAML configurations

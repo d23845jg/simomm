@@ -1,6 +1,6 @@
 import torch
 
-from .utils import topk_values_mask
+from model_merging.utils import topk_values_mask
 
 
 ## TIES MERGING UTILS

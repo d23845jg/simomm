@@ -37,7 +37,7 @@ def eval(
             test_metric.update_metric(test_pred, target, test_loss)
 
             # TODO: remove this
-            if k==2:
+            if k==10:
                 break
 
     test_str = test_metric.compute_metric()
@@ -115,7 +115,7 @@ def evaluate_task_vector(
     elif config["model_merging"]["specify_lambda"] != "None":
         scaling_coef_range = [config["model_merging"]["specify_lambda"]]
     else:
-        scaling_coef_range = np.linspace(0.0, 1.0, config["model_merging"]["num_tv_coef_points"] // 2 + 1)[1:]
+        scaling_coef_range = np.linspace(0.0, 1.0, config["model_merging"]["num_tv_coef_points"])
 
     if config["model_merging"]["method"] == "tall_mask":
         if config["tall_mask"]["load_mask"]:
@@ -123,7 +123,7 @@ def evaluate_task_vector(
             info["loaded_mask"] = evaluate_task_vector_at_coef(
                 pt_checkpoint, task_vector, config, 1.0, use_val_dataset, eval_masks,
             )
-            print(f"Delta MTL: {round(info['loaded_mask']['all'][0] * 100, 2)}%")
+            print(f"Delta MTL: {round(info['loaded_mask']['all'][0], 2)}")
         else:
             for tall_mask_lambda in [0.2, 0.3, 0.4, 0.5, 0.6]:
                 print("\n" * 2)
@@ -131,7 +131,7 @@ def evaluate_task_vector(
                 info[tall_mask_lambda] = evaluate_task_vector_at_coef(
                     pt_checkpoint, task_vector, config, 1.0, use_val_dataset, eval_masks[tall_mask_lambda],
                 )
-                print(f"Delta MTL: {round(info[tall_mask_lambda]['all'][0] * 100, 2)}%")
+                print(f"Delta MTL: {round(info[tall_mask_lambda]['all'][0], 2)}")
     else:
         for scaling_coef in scaling_coef_range:
             print("\n" * 2)
@@ -139,7 +139,8 @@ def evaluate_task_vector(
             info[scaling_coef] = evaluate_task_vector_at_coef(
                 pt_checkpoint, task_vector, config, scaling_coef, use_val_dataset, eval_masks
             )
-            print(f"Delta MTL: {round(info[scaling_coef]['all'][0] * 100, 2)}%")
+            print(" | ".join([f"{task} metric: {round(info[scaling_coef][task][1], 4)}" for task in task_vector.tasks.keys()]))
+            print(f"Delta MTL: {round(info[scaling_coef]['all'][0], 2)}")
 
     return info
 
