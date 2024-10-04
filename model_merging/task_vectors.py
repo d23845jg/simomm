@@ -17,7 +17,6 @@ class _TaskVector():
         pretrained_state_dict=None,
         finetuned_state_dict=None,
         theta=None,
-        tau=None,
     ):
         """Initializes the task vector from a pretrained and a finetuned checkpoints.
 
@@ -110,7 +109,7 @@ class MTLTaskVector(_TaskVector):
         tau=None,
     ):
         if theta is not None and tau is not None:
-            super().__init__(None, None, theta, None)
+            super().__init__(None, None, theta)
             self.tau = tau
         else:
             assert pretrained_checkpoint is not None and finetuned_checkpoint is not None
@@ -153,17 +152,13 @@ class MTLTaskVector(_TaskVector):
         """Apply a task vector to a pretrained model."""
         with torch.no_grad():
             pt_model = self._safe_load(pretrained_checkpoint)
-
-            # updates = {}
             pt_model_state_dict = pt_model.state_dict()
+            # updates = {}
             
             for param_name, param_value in self.theta.items():
-                
-                # Efficient in-place addition
                 pt_model_state_dict[param_name].add_(scaling_coef * param_value)
                 # updates[param_name]  = pt_model_state_dict[param_name] + scaling_coef * param_value
             
-            # Load updated state dict into the model
             # pt_model.load_state_dict({**pt_model.state_dict(), **updates, **self.tau})
             pt_model.load_state_dict({**pt_model.state_dict(), **self.tau}, strict=False)
         

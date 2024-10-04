@@ -297,6 +297,11 @@ class MTLDeepLabv3(nn.Module):
         for mm in self.shared_modules():
             mm.zero_grad()
 
+    def freeze_shared_layers(self, requires_grad=False):
+        for module in self.shared_modules():
+            for param in module.parameters():
+                param.requires_grad = requires_grad
+
 
 # --------------------------------------------------------------------------------
 # Define VGG-16 (for CIFAR-100 experiments)
