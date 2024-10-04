@@ -1,6 +1,8 @@
 import torch
-from create_network import *
+
 from typing import Union
+
+from training.create_network import *
 from utils import torch_load
 
 _Checkpoint = Union[str, nn.Module]

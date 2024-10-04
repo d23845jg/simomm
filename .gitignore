@@ -3,5 +3,5 @@
 __pycache__/
 panoptic_parts/
 dataset/
-logging/
+logs/
 models/

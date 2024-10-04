@@ -1,4 +1,6 @@
 import torch
+import wandb
+
 from itertools import chain
 
 from model_merging.task_vectors import MTLTaskVector

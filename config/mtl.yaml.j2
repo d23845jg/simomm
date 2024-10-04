@@ -1,3 +1,7 @@
+wandb:
+  project: "simomm"
+  mode: "online"
+  
 dataset_paths:
   nyuv2: "dataset/nyuv2"
   cityscapes: "dataset/cityscapes"
@@ -16,6 +20,7 @@ training_params:
 
   # Training parameters
   total_epochs: 10
+  lr: 1e-3
   batch_size: 8
   gpu: 1 # gpu ID
   seed: 42
@@ -29,8 +34,9 @@ model_merging:
   dataset: "nyuv2" # nyuv2, cityscapes
   network: "split" # split, mtan
   
-  num_tv_coef_points: 5
+  num_scaling_coef_samples: 5
   specify_lambda: None
+
 
 # Include other YAML configurations
 {% include "config/model_merging/average.yaml.j2" %}

@@ -2,47 +2,15 @@ import copy
 import numpy as np
 import time
 import torch
+import wandb
+
 from typing import Union, Dict, Any, Optional
+
 from model_merging.task_vectors import MTLTaskVector
-from utils import get_data_loaders, TaskMetric, compute_loss
+from training.utils import TaskMetric, eval
+from utils import get_data_loaders
 
 _Checkpoint = Union[str, torch.nn.Module]
-
-
-def eval(
-    model, 
-    config: Dict[str, Any], 
-    use_val_dataset:bool=False, 
-    model_merging:bool=False, 
-    device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-):
-    _, val_loader, test_loader = get_data_loaders(config, model_merging=model_merging)
-    data_loader = val_loader if use_val_dataset else test_loader
-    data_batch = len(data_loader)
-    epochs = 1 if model_merging else config["training_params"]["total_epochs"]
-    dataset_name = config["model_merging"]["dataset"] if model_merging else config["training_params"]["dataset"]
-    test_metric = TaskMetric(model.tasks, model.tasks, config["training_params"]["batch_size"], epochs, dataset_name, include_mtl=True)
-
-    model.eval()
-    with torch.no_grad():
-        dataset = iter(data_loader)
-        for k in range(data_batch):
-            data, target = next(dataset)
-            data = data.to(device)
-            target = {task_id: target[task_id].to(device) for task_id in model.tasks.keys()}
-
-            test_pred = model(data)
-
-            test_loss = [compute_loss(test_pred[i], target[task_id], task_id) for i, task_id in enumerate(model.tasks)]
-            test_metric.update_metric(test_pred, target, test_loss)
-
-            # TODO: remove this
-            if k==10:
-                break
-
-    test_str = test_metric.compute_metric()
-    test_metric.reset()
-    return test_metric.metric, test_str
 
 
 def add_normalized_accuracy(metrics: Dict[str, Any], config: Dict[str, Any]):
@@ -91,9 +59,15 @@ def evaluate_task_vector_at_coef(
     #     # reconstruct theta_t^
     #     model = sparse_task_vector.apply_to(pt_checkpoint, scaling_coef=1.0)
 
-    coef_metrics, _ = eval(model, config, use_val_dataset, model_merging=True)
+    _, val_loader, test_loader = get_data_loaders(config, model_merging=True)
+    data_loader = val_loader if use_val_dataset else test_loader
+    test_metric = TaskMetric(model.tasks, model.tasks, config["training_params"]["batch_size"], 1, config["model_merging"]["dataset"], include_mtl=True)
+    eval(int(10 * scaling_coef), model, data_loader, test_metric) # 10 * scaling_coef is a hack to change it to an int
+    coef_metrics = test_metric.metric
+
     coef_metrics = add_normalized_accuracy(coef_metrics, config)
     print(f"Total evaluation time: {time.time() - start_time:.2f}s")
+
     return coef_metrics
 
 
@@ -115,7 +89,7 @@ def evaluate_task_vector(
     elif config["model_merging"]["specify_lambda"] != "None":
         scaling_coef_range = [config["model_merging"]["specify_lambda"]]
     else:
-        scaling_coef_range = np.linspace(0.0, 1.0, config["model_merging"]["num_tv_coef_points"])
+        scaling_coef_range = np.linspace(0.0, 1.0, config["model_merging"]["num_scaling_coef_samples"])
 
     if config["model_merging"]["method"] == "tall_mask":
         if config["tall_mask"]["load_mask"]:
