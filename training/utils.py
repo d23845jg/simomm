@@ -254,18 +254,25 @@ def overwrite_grad(m, newgrad, grad_dims, num_tasks):
 """
 Visualize predictions for semantic segmentation and depth estimation tasks.
 """
-def visualize_semantic_classes(epoch, original_image, pred_seg, target_seg, alpha=0.3):
+
+def normalize(data):
+    min_val = np.min(data)
+    max_val = np.max(data)
+    return (data - min_val) / (max_val - min_val)
+
+
+def visualize_semantic_classes(epoch, original_image, pred_seg, target_seg, alpha=0.4):
     n_classes = pred_seg.shape[1]
     pred_seg = pred_seg.argmax(1)
 
     for idx in range(pred_seg.shape[0]):
         fig, ax = plt.subplots(1, 2, figsize=(10, 5))
-        ax[0].imshow(original_image[idx].permute(1, 2, 0).cpu().numpy())
+        ax[0].imshow(normalize(original_image[idx].permute(1, 2, 0).cpu().numpy()))
         ax[0].imshow(target_seg[idx].cpu().numpy(), cmap='tab20', alpha=alpha, vmin=0, vmax=n_classes-1)
         ax[0].set_title('Ground Truth')
         ax[0].axis('off')
 
-        ax[1].imshow(original_image[idx].permute(1, 2, 0).cpu().numpy())
+        ax[1].imshow(normalize(original_image[idx].permute(1, 2, 0).cpu().numpy()))
         ax[1].imshow(pred_seg[idx].cpu().numpy(), cmap='tab20', alpha=alpha, vmin=0, vmax=n_classes-1)
         ax[1].set_title('Prediction')
         ax[1].axis('off')
@@ -279,19 +286,19 @@ def visualize_semantic_classes(epoch, original_image, pred_seg, target_seg, alph
         plt.close(fig)
 
 
-def visualize_depth(epoch, original_image, pred_depth, target_depth):
+def visualize_depth(epoch, original_image, pred_depth, target_depth, alpha=0.4):
     for idx in range(pred_depth.shape[0]):
         fig, ax = plt.subplots(1, 2, figsize=(10, 5))
 
         # Target Depth
-        ax[0].imshow(original_image[idx].permute(1, 2, 0).cpu().numpy())
-        ax[0].imshow(target_depth[idx].squeeze(0).cpu().numpy(), cmap='jet', alpha=0.3)
+        ax[0].imshow(normalize(original_image[idx].permute(1, 2, 0).cpu().numpy()))
+        ax[0].imshow(target_depth[idx].squeeze(0).cpu().numpy(), cmap='jet', alpha=alpha)
         ax[0].set_title('Target Depth')
         ax[0].axis('off')
 
         # Predicted Depth
-        ax[1].imshow(original_image[idx].permute(1, 2, 0).cpu().numpy())
-        ax[1].imshow(pred_depth[idx].squeeze(0).cpu().numpy(), cmap='jet', alpha=0.3)
+        ax[1].imshow(normalize(original_image[idx].permute(1, 2, 0).cpu().numpy()))
+        ax[1].imshow(pred_depth[idx].squeeze(0).cpu().numpy(), cmap='jet', alpha=alpha)
         ax[1].set_title('Predicted Depth')
         ax[1].axis('off')
 
@@ -359,7 +366,7 @@ def eval(
                         VISUALIZATION_FUNCS[task_id](epoch, data, test_pred[i], target[task_id])
 
             # TODO: remove this
-            if batch_idx==3:
+            if batch_idx==5:
                 break
 
     test_str = test_metric.compute_metric()
