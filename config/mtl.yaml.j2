@@ -21,7 +21,7 @@ training_params:
   # Training parameters
   total_epochs: 10
   lr: 1e-3
-  batch_size: 8
+  batch_size: 2
   gpu: 1 # gpu ID
   seed: 42
 
@@ -29,8 +29,8 @@ model_merging:
   method: "sum"
   pt_model_file: "models/mtl_model.pt"
   ft_model_files:
-    - "models/split/full_train/seg_model.pt"
-    - "models/split/full_train/depth_model.pt"
+    - "models/split/linear_probing/seg_model.pt"
+    - "models/split/linear_probing/depth_model.pt"
   dataset: "nyuv2" # nyuv2, cityscapes
   network: "split" # split, mtan
   

@@ -1,11 +1,12 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn.functional as F
 import wandb
 
 from copy import deepcopy
+from PIL import Image
 from scipy.optimize import minimize
-
 
 
 """
@@ -37,76 +38,10 @@ class ConfMatrix(object):
         return torch.mean(iu).item()
 
 
-def create_task_flags(task, dataset, with_noise=False):
-    """
-    Record task and its prediction dimension.
-    Noise prediction is only applied in auxiliary learning.
-    """
-    nyu_tasks = {'seg': 13, 'depth': 1, 'normal': 3}
-    cityscapes_tasks = {'seg': 19, 'part_seg': 10, 'disp': 1}
 
-    tasks = {}
-    if task != 'all':
-        if dataset == 'nyuv2':
-            tasks[task] = nyu_tasks[task]
-        elif dataset == 'cityscapes':
-            tasks[task] = cityscapes_tasks[task]
-    else:
-        if dataset == 'nyuv2':
-            tasks = nyu_tasks
-        elif dataset == 'cityscapes':
-            tasks = cityscapes_tasks
-
-    if with_noise:
-        tasks['noise'] = 1
-    return tasks
-
-
-def get_weight_str(weight, tasks):
-    """
-    Record task weighting.
-    """
-    weight_str = 'Task Weighting | '
-    for i, task_id in enumerate(tasks):
-        weight_str += '{} {:.04f} '.format(task_id.title(), weight[i])
-    return weight_str
-
-
-def get_weight_str_ranked(weight, tasks, rank_num):
-    """
-    Record top-k ranked task weighting.
-    """
-    rank_idx = np.argsort(weight)
-
-    if type(tasks) == dict:
-        tasks = list(tasks.keys())
-
-    top_str = 'Top {}: '.format(rank_num)
-    bot_str = 'Bottom {}: '.format(rank_num)
-    for i in range(rank_num):
-        top_str += '{} {:.02f} '.format(tasks[rank_idx[-i-1]].title(), weight[rank_idx[-i-1]])
-        bot_str += '{} {:.02f} '.format(tasks[rank_idx[i]].title(), weight[rank_idx[i]])
-
-    return 'Task Weighting | {}| {}'.format(top_str, bot_str)
-
-
-def compute_loss(pred, gt, task_id):
-    """
-    Compute task-specific loss.
-    """
-    if task_id in ['seg', 'part_seg'] or 'class' in task_id:
-        # Cross Entropy Loss with Ignored Index (values are -1)
-        loss = F.cross_entropy(pred, gt, ignore_index=-1)
-
-    if task_id in ['normal', 'depth', 'disp', 'noise']:
-        # L1 Loss with Ignored Region (values are 0 or -1)
-        invalid_idx = -1 if task_id == 'disp' else 0
-        valid_mask = (torch.sum(gt, dim=1, keepdim=True) != invalid_idx).to(pred.device)
-        loss = torch.sum(F.l1_loss(pred, gt, reduction='none').masked_select(valid_mask)) \
-                / torch.nonzero(valid_mask, as_tuple=False).size(0)
-    return loss
-
-
+"""
+Define TaskMetric class to record task-specific metrics.
+"""
 class TaskMetric:
     def __init__(self, train_tasks, pri_tasks, batch_size, epochs, dataset, include_mtl=False):
         self.train_tasks = train_tasks
@@ -224,6 +159,7 @@ class TaskMetric:
             return max(self.metric[task][:e])
 
 
+
 """
 Define Gradient-based frameworks here. 
 Based on https://github.com/Cranial-XIX/CAGrad/blob/main/cityscapes/utils.py
@@ -316,8 +252,83 @@ def overwrite_grad(m, newgrad, grad_dims, num_tasks):
 
 
 """
-Define model training and evaluation functions here.
+Visualize predictions for semantic segmentation and depth estimation tasks.
 """
+def visualize_semantic_classes(epoch, original_image, pred_seg, target_seg, alpha=0.3):
+    n_classes = pred_seg.shape[1]
+    pred_seg = pred_seg.argmax(1)
+
+    for idx in range(pred_seg.shape[0]):
+        fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+        ax[0].imshow(original_image[idx].permute(1, 2, 0).cpu().numpy())
+        ax[0].imshow(target_seg[idx].cpu().numpy(), cmap='tab20', alpha=alpha, vmin=0, vmax=n_classes-1)
+        ax[0].set_title('Ground Truth')
+        ax[0].axis('off')
+
+        ax[1].imshow(original_image[idx].permute(1, 2, 0).cpu().numpy())
+        ax[1].imshow(pred_seg[idx].cpu().numpy(), cmap='tab20', alpha=alpha, vmin=0, vmax=n_classes-1)
+        ax[1].set_title('Prediction')
+        ax[1].axis('off')
+
+        # Save the figure to a PIL Image
+        plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
+        fig.canvas.draw()
+        pil_image = Image.frombytes('RGB', fig.canvas.get_width_height(), fig.canvas.tostring_rgb())
+
+        wandb.log({f"seg_task_image/epoch_{epoch}": wandb.Image(pil_image)})
+        plt.close(fig)
+
+
+def visualize_depth(epoch, original_image, pred_depth, target_depth):
+    for idx in range(pred_depth.shape[0]):
+        fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+
+        # Target Depth
+        ax[0].imshow(original_image[idx].permute(1, 2, 0).cpu().numpy())
+        ax[0].imshow(target_depth[idx].squeeze(0).cpu().numpy(), cmap='jet', alpha=0.3)
+        ax[0].set_title('Target Depth')
+        ax[0].axis('off')
+
+        # Predicted Depth
+        ax[1].imshow(original_image[idx].permute(1, 2, 0).cpu().numpy())
+        ax[1].imshow(pred_depth[idx].squeeze(0).cpu().numpy(), cmap='jet', alpha=0.3)
+        ax[1].set_title('Predicted Depth')
+        ax[1].axis('off')
+
+        # Save the figure to a PIL Image
+        plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
+        fig.canvas.draw()
+        pil_image = Image.frombytes('RGB', fig.canvas.get_width_height(), fig.canvas.tostring_rgb())
+
+        wandb.log({f"depth_task_image/epoch_{epoch}": wandb.Image(pil_image)})
+        plt.close(fig)
+
+VISUALIZATION_FUNCS = {
+    'seg': visualize_semantic_classes,
+    'depth': visualize_depth,
+}
+
+
+
+"""
+Define model evaluation function.
+"""
+def compute_loss(pred, gt, task_id):
+    """
+    Compute task-specific loss.
+    """
+    if task_id in ['seg', 'part_seg'] or 'class' in task_id:
+        # Cross Entropy Loss with Ignored Index (values are -1)
+        loss = F.cross_entropy(pred, gt, ignore_index=-1)
+
+    if task_id in ['normal', 'depth', 'disp', 'noise']:
+        # L1 Loss with Ignored Region (values are 0 or -1)
+        invalid_idx = -1 if task_id == 'disp' else 0
+        valid_mask = (torch.sum(gt, dim=1, keepdim=True) != invalid_idx).to(pred.device)
+        loss = torch.sum(F.l1_loss(pred, gt, reduction='none').masked_select(valid_mask)) \
+                / torch.nonzero(valid_mask, as_tuple=False).size(0)
+    return loss
+
 def eval(
     epoch: int,
     model, 
@@ -326,11 +337,13 @@ def eval(
     device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 ):
     data_batch = len(data_loader)
+    # viz_batch_idx = np.random.randint(0, data_batch)
+    viz_batch_idx = 0
 
     model.eval()
     with torch.no_grad():
         dataset = iter(data_loader)
-        for k in range(data_batch):
+        for batch_idx in range(data_batch):
             data, target = next(dataset)
             data = data.to(device)
             target = {task_id: target[task_id].to(device) for task_id in model.tasks.keys()}
@@ -340,8 +353,13 @@ def eval(
             test_loss = [compute_loss(test_pred[i], target[task_id], task_id) for i, task_id in enumerate(model.tasks)]
             test_metric.update_metric(test_pred, target, test_loss)
 
+            if batch_idx == viz_batch_idx:
+                for i, task_id in enumerate(model.tasks):
+                    if task_id in VISUALIZATION_FUNCS:
+                        VISUALIZATION_FUNCS[task_id](epoch, data, test_pred[i], target[task_id])
+
             # TODO: remove this
-            if k==3:
+            if batch_idx==3:
                 break
 
     test_str = test_metric.compute_metric()
@@ -353,3 +371,60 @@ def eval(
     }, step=epoch)
 
     return test_str
+
+
+
+"""
+Define task flags and weight strings.
+"""
+def create_task_flags(task, dataset, with_noise=False):
+    """
+    Record task and its prediction dimension.
+    Noise prediction is only applied in auxiliary learning.
+    """
+    nyu_tasks = {'seg': 13, 'depth': 1, 'normal': 3}
+    cityscapes_tasks = {'seg': 19, 'part_seg': 10, 'disp': 1}
+
+    tasks = {}
+    if task != 'all':
+        if dataset == 'nyuv2':
+            tasks[task] = nyu_tasks[task]
+        elif dataset == 'cityscapes':
+            tasks[task] = cityscapes_tasks[task]
+    else:
+        if dataset == 'nyuv2':
+            tasks = nyu_tasks
+        elif dataset == 'cityscapes':
+            tasks = cityscapes_tasks
+
+    if with_noise:
+        tasks['noise'] = 1
+    return tasks
+
+
+def get_weight_str(weight, tasks):
+    """
+    Record task weighting.
+    """
+    weight_str = 'Task Weighting | '
+    for i, task_id in enumerate(tasks):
+        weight_str += '{} {:.04f} '.format(task_id.title(), weight[i])
+    return weight_str
+
+
+def get_weight_str_ranked(weight, tasks, rank_num):
+    """
+    Record top-k ranked task weighting.
+    """
+    rank_idx = np.argsort(weight)
+
+    if type(tasks) == dict:
+        tasks = list(tasks.keys())
+
+    top_str = 'Top {}: '.format(rank_num)
+    bot_str = 'Bottom {}: '.format(rank_num)
+    for i in range(rank_num):
+        top_str += '{} {:.02f} '.format(tasks[rank_idx[-i-1]].title(), weight[rank_idx[-i-1]])
+        bot_str += '{} {:.02f} '.format(tasks[rank_idx[i]].title(), weight[rank_idx[i]])
+
+    return 'Task Weighting | {}| {}'.format(top_str, bot_str)
