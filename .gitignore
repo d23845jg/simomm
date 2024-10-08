@@ -4,4 +4,4 @@ __pycache__/
 panoptic_parts/
 dataset/
 logs/
-models/
+checkpoints/

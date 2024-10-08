@@ -103,7 +103,7 @@ class NYUv2(data.Dataset):
 
         # calculate data length
         self.data_len = len(fnmatch.filter(os.listdir(self.data_path + '/image'), '*.npy'))
-        self.noise = torch.rand(self.data_len, 1, 288, 384)
+        self.noise = torch.rand(self.data_len, 1, 224, 224)
 
     def __getitem__(self, index):
         # load data from the pre-processed npy files
@@ -117,7 +117,8 @@ class NYUv2(data.Dataset):
 
         # apply data augmentation if required
         if self.augmentation:
-            data_dict = DataTransform(crop_size=[288, 384], scales=[1.0, 1.2, 1.5])(data_dict)
+            # data_dict = DataTransform(crop_size=[288, 384], scales=[1.0, 1.2, 1.5])(data_dict)
+            data_dict = DataTransform(crop_size=[224, 224], scales=[1.0, 1.2, 1.5])(data_dict)
 
         im = 2. * data_dict.pop('im') - 1.  # normalised to [-1, 1]
         return im, data_dict
