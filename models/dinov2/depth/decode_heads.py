@@ -124,7 +124,6 @@ class DepthBaseDecodeHead(nn.Module):
         """
         depth_pred = self.forward(inputs, img_metas)
         losses = self.losses(depth_pred, depth_gt)
-        losses.update({"pred": depth_pred})
         # log_imgs = self.log_images(img[0], depth_pred[0], depth_gt[0], img_metas[0])
         # losses.update(**log_imgs)
         return losses
@@ -181,6 +180,8 @@ class DepthBaseDecodeHead(nn.Module):
         depth_pred = resize(
             input=depth_pred, size=depth_gt.shape[2:], mode="bilinear", align_corners=self.align_corners, warning=False
         )
+        loss.update({"pred": depth_pred})
+        
         if not isinstance(self.loss_decode, nn.ModuleList):
             losses_decode = [self.loss_decode]
         else:

@@ -56,9 +56,10 @@ class TaskMetric:
 
         if include_mtl:  # include multi-task performance (relative averaged task improvement)
             self.metric['all'] = np.zeros(epochs)
+        
         for task in self.train_tasks:
             if task in ['seg', 'part_seg']:
-                self.conf_mtx[task] = ConfMatrix(self.train_tasks[task])
+                self.conf_mtx[task] = ConfMatrix(self.train_tasks[task]["num_classes"])
 
     def reset(self):
         """
@@ -71,21 +72,22 @@ class TaskMetric:
             for i in self.conf_mtx:
                 self.conf_mtx[i].reset()
 
-    def update_metric(self, task_pred, task_gt, task_loss):
+    def update_metric(self, train_res, task_gt):
         """
         Update batch-wise metric for each task.
             :param task_pred: [TASK_PRED1, TASK_PRED2, ...]
             :param task_gt: {'TASK_ID1': TASK_GT1, 'TASK_ID2': TASK_GT2, ...}
             :param task_loss: [TASK_LOSS1, TASK_LOSS2, ...]
         """
-        curr_bs = task_pred[0].shape[0]
+        curr_bs = list(train_res.values())[0]["pred"][0].shape[0]
         r = self.data_counter / (self.data_counter + curr_bs / self.batch_size)
         e = self.epoch_counter
         self.data_counter += 1
 
         with torch.no_grad():
-            for loss, pred, (task_id, gt) in zip(task_loss, task_pred, task_gt.items()):
-                self.metric[task_id][e, 0] = r * self.metric[task_id][e, 0] + (1 - r) * loss.item()
+            for task_id, gt in task_gt.items():
+                pred = train_res[task_id]["pred"]
+                self.metric[task_id][e, 0] = r * self.metric[task_id][e, 0] + (1 - r) * train_res[task_id]["total_loss"].item()
 
                 if task_id in ['seg', 'part_seg']:
                     # update confusion matrix (metric will be computed directly in the Confusion Matrix)
@@ -344,6 +346,7 @@ def eval(
     device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 ):
     data_batch = len(data_loader)
+    # TODO: switch to random batch
     # viz_batch_idx = np.random.randint(0, data_batch)
     viz_batch_idx = 0
 
@@ -351,19 +354,18 @@ def eval(
     with torch.no_grad():
         dataset = iter(data_loader)
         for batch_idx in range(data_batch):
-            data, target = next(dataset)
-            data = data.to(device)
+            img, target = next(dataset)
+            img = img.to(device)
             target = {task_id: target[task_id].to(device) for task_id in model.tasks.keys()}
 
-            test_pred = model(data)
-
-            test_loss = [compute_loss(test_pred[i], target[task_id], task_id) for i, task_id in enumerate(model.tasks)]
-            test_metric.update_metric(test_pred, target, test_loss)
+            test_res = model(img, None, img_gt=target, return_loss=True)
+            
+            test_metric.update_metric(test_res, target)
 
             if batch_idx == viz_batch_idx:
                 for i, task_id in enumerate(model.tasks):
                     if task_id in VISUALIZATION_FUNCS:
-                        VISUALIZATION_FUNCS[task_id](epoch, data, test_pred[i], target[task_id])
+                        VISUALIZATION_FUNCS[task_id](epoch, img, test_res[i]["pred"], target[task_id])
 
             # TODO: remove this
             if batch_idx==5:
@@ -373,7 +375,7 @@ def eval(
     test_metric.reset()
 
     wandb.log({
-        **{f"test/loss/{task_id}": test_loss[i] for i, task_id in enumerate(model.tasks)},
+        **{f"train/loss/{task_id}": task_data["total_loss"] for task_id, task_data in test_res.items()},
         **{f"test/metric/{task_id}": test_metric.get_metric(task_id) for task_id in model.tasks}
     }, step=epoch)
 
@@ -389,23 +391,29 @@ def create_task_flags(task, dataset, with_noise=False):
     Record task and its prediction dimension.
     Noise prediction is only applied in auxiliary learning.
     """
-    nyu_tasks = {'seg': 13, 'depth': 1, 'normal': 3}
-    cityscapes_tasks = {'seg': 19, 'part_seg': 10, 'disp': 1}
+    nyu_tasks = {
+        "seg": {
+            "num_classes": 13,
+        },
+        "depth": {
+            "num_classes": 1,
+            "min_depth": 0.001,
+            "max_depth": 10.0,
+        },
+    }
+    cityscapes_tasks = {'seg': 19, 'part_seg': 10, 'disp': 1}  # TODO
+    dataset_tasks = {
+        'nyuv2': nyu_tasks,
+        'cityscapes': cityscapes_tasks
+    }
 
-    tasks = {}
+    tasks = dataset_tasks.get(dataset, {})
     if task != 'all':
-        if dataset == 'nyuv2':
-            tasks[task] = nyu_tasks[task]
-        elif dataset == 'cityscapes':
-            tasks[task] = cityscapes_tasks[task]
-    else:
-        if dataset == 'nyuv2':
-            tasks = nyu_tasks
-        elif dataset == 'cityscapes':
-            tasks = cityscapes_tasks
+        tasks = {task: tasks.get(task)}
 
     if with_noise:
-        tasks['noise'] = 1
+        tasks['noise'] = {'num_classes': 1}
+
     return tasks
 
 

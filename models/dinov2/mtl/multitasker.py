@@ -98,10 +98,13 @@ class MTLDinoV2(nn.Module):
   def _decode_heads_forward_train(self, img, x, img_metas, img_gt, **kwargs): # TODO: return the pred and the loss
     """Run forward function and calculate loss for decode head in
     training."""
-    losses = dict()
-    for task in self.head_tasks.keys():
-      losses[task] = self.decoders[task].forward_train(img, x, img_metas, img_gt[task], **kwargs)
-    
+    losses = {
+      task: {
+        **(task_losses := self.decoders[task].forward_train(img, x, img_metas, img_gt[task], **kwargs)),
+        "total_loss": sum(loss for loss_name, loss in task_losses.items() if "loss" in loss_name)
+      }
+      for task in self.head_tasks.keys()
+    }
     # losses.update(add_prefix(loss_decode, "decode"))
     return losses
   
@@ -196,6 +199,18 @@ class MTLDinoV2(nn.Module):
         img_pred = self.whole_inference(img, img_meta, rescale, size=size)
     return img_pred
   
+  def mtl_loss(self, losses, mtl_weight="equal", **kwargs):
+    """Calculate the total loss for multi-task learning."""
+    if mtl_weight == "equal":
+      total_loss = sum(loss["total_loss"] for loss in losses.values())
+    elif mtl_weight == "uncert":
+      # TODO: implement this
+      total_loss = 1
+    else:
+      raise NotImplementedError(f"Unsupported mtl_weight: {mtl_weight}")
+    
+    return total_loss
+  
   def forward_train(self, img, img_metas, img_gt, **kwargs):
     """Forward function for training.
 
@@ -214,6 +229,7 @@ class MTLDinoV2(nn.Module):
     """
     x = self.extract_feat(img)
     losses = self._decode_heads_forward_train(img, x, img_metas, img_gt, **kwargs)
+    losses["total_loss"] = self.mtl_loss(losses, **kwargs)
     return losses
   
   def forward_test(self, imgs, img_metas, **kwargs):

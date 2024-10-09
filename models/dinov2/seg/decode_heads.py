@@ -133,7 +133,6 @@ class SegBaseDecodeHead(nn.Module):
       """
       seg_pred = self.forward(inputs, img_metas)
       losses = self.loss_by_feat(seg_pred, seg_gt)
-      losses.update({"pred": seg_pred})
       return losses
 
     def cls_seg(self, feat):
@@ -179,10 +178,8 @@ class SegBaseDecodeHead(nn.Module):
         seg_logits = resize(
           input=seg_logits, size=seg_label.shape[1:], mode='bilinear', align_corners=self.align_corners, warning=False
         )
-        # if self.sampler is not None:
-        #   seg_weight = self.sampler.sample(seg_logits, seg_label)
-        # else:
-        #   seg_weight = None
+        loss.update({"pred": seg_logits})
+        
         seg_weight = None
         seg_label = seg_label.squeeze(1)
 
