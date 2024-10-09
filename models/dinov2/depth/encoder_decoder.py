@@ -100,9 +100,7 @@ class DepthEncoderDecoder(nn.Module):
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
-        print("A")
         x = self.extract_feat(img)
-        print("B")
 
         losses = dict()
 
@@ -123,7 +121,6 @@ class DepthEncoderDecoder(nn.Module):
         If h_crop > h_img or w_crop > w_img, the small patch will be used to
         decode without padding.
         """
-
         h_stride, w_stride = stride
         h_crop, w_crop = crop_size
         batch_size, _, h_img, w_img = img.size()
@@ -206,7 +203,7 @@ class DepthEncoderDecoder(nn.Module):
         # aug_test rescale all imgs back to ori_shape for now
         assert rescale
         # to save memory, we get augmented depth logit inplace
-        depth_pred = self.inference(imgs[0], img_metas[0], rescale)
+        depth_pred = self.inference(imgs[0], img_metas[0], rescale) # TODO: i think we need to add size here
         for i in range(1, len(imgs)):
             cur_depth_pred = self.inference(imgs[i], img_metas[i], rescale, size=depth_pred.shape[-2:])
             depth_pred += cur_depth_pred
@@ -260,7 +257,8 @@ class DepthEncoderDecoder(nn.Module):
         if return_loss:
             return self.forward_train(img, img_metas, **kwargs)
         else:
-            return self.forward_test(img, img_metas, **kwargs)
+            # return self.forward_test(img, img_metas, **kwargs)
+            return None
 
     def train_step(self, data_batch, optimizer, **kwargs):
         """The iteration step during training.

@@ -212,11 +212,8 @@ class DinoVisionTransformer(nn.Module):
 
     def prepare_tokens_with_masks(self, x, masks=None):
         B, nc, w, h = x.shape
-        print("CCC")
-        print(x.shape)
-        x = x.clone()
+        x = x.clone() # TODO: need to double check this
         x = self.patch_embed(x)
-        print(x.shape)
         if masks is not None:
             x = torch.where(masks.unsqueeze(-1), self.mask_token.to(x.dtype).unsqueeze(0), x)
 

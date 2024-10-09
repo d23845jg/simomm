@@ -6,6 +6,7 @@
 import copy
 from functools import partial
 import math
+import numpy as np
 import warnings
 
 import torch
@@ -16,8 +17,6 @@ from .ops import resize
 
 # XXX: (Untested) replacement for mmcv.imdenormalize()
 def _imdenormalize(img, mean, std, to_bgr=True):
-    import numpy as np
-
     mean = mean.reshape(1, -1).astype(np.float64)
     std = std.reshape(1, -1).astype(np.float64)
     img = (img * std) + mean
@@ -125,10 +124,9 @@ class DepthBaseDecodeHead(nn.Module):
         """
         depth_pred = self.forward(inputs, img_metas)
         losses = self.losses(depth_pred, depth_gt)
-
-        log_imgs = self.log_images(img[0], depth_pred[0], depth_gt[0], img_metas[0])
-        losses.update(**log_imgs)
-
+        losses.update({"pred": depth_pred})
+        # log_imgs = self.log_images(img[0], depth_pred[0], depth_gt[0], img_metas[0])
+        # losses.update(**log_imgs)
         return losses
 
     def forward_test(self, inputs, img_metas):
@@ -195,8 +193,6 @@ class DepthBaseDecodeHead(nn.Module):
         return loss
 
     def log_images(self, img_path, depth_pred, depth_gt, img_meta):
-        import numpy as np
-
         show_img = copy.deepcopy(img_path.detach().cpu().permute(1, 2, 0))
         show_img = show_img.numpy().astype(np.float32)
         show_img = _imdenormalize(

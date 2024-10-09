@@ -134,6 +134,7 @@ def _make_dinov2_linear_depther(
     )
     model.backbone.register_forward_pre_hook(lambda _, x: CenterPadding(patch_size)(x[0]))
 
+    # Avoid init the head
     # if pretrained:
     #     layers_str = str(layers) if layers == 4 else ""
     #     weights_str = weights.value.lower()
@@ -210,10 +211,10 @@ def _make_dinov2_dpt_depther(
     dpt_depth_head = _make_dinov2_dpt_depth_head(embed_dim=backbone.embed_dim, min_depth=min_depth, max_depth=max_depth)
 
     out_index = {
-        "vit_small": [2, 5, 8, 11],
-        "vit_base": [2, 5, 8, 11],
-        "vit_large": [4, 11, 17, 23],
-        "vit_giant2": [9, 19, 29, 39],
+        "vit_small": [5, 7, 9, 11], # [2, 5, 8, 11]
+        "vit_base": [5, 7, 9, 11], # [2, 5, 8, 11]
+        "vit_large": [17, 19, 21, 23], # [4, 11, 17, 23]
+        "vit_giant2": [33, 35, 37, 39], # [9, 19, 29, 39]
     }[arch_name]
 
     model = DepthEncoderDecoder(backbone=backbone, decode_head=dpt_depth_head)
@@ -226,13 +227,14 @@ def _make_dinov2_dpt_depther(
     )
     model.backbone.register_forward_pre_hook(lambda _, x: CenterPadding(backbone.patch_size)(x[0]))
 
-    if pretrained:
-        weights_str = weights.value.lower()
-        url = _DINOV2_BASE_URL + f"/{model_name}/{model_name}_{weights_str}_dpt_head.pth"
-        checkpoint = torch.hub.load_state_dict_from_url(url, map_location="cpu")
-        if "state_dict" in checkpoint:
-            state_dict = checkpoint["state_dict"]
-        model.load_state_dict(state_dict, strict=False)
+    # Avoid init the head
+    # if pretrained:
+    #     weights_str = weights.value.lower()
+    #     url = _DINOV2_BASE_URL + f"/{model_name}/{model_name}_{weights_str}_dpt_head.pth"
+    #     checkpoint = torch.hub.load_state_dict_from_url(url, map_location="cpu")
+    #     if "state_dict" in checkpoint:
+    #         state_dict = checkpoint["state_dict"]
+    #     model.load_state_dict(state_dict, strict=False)
 
     return model
 
