@@ -38,7 +38,7 @@ class MTLDinoV2(nn.Module):
   def __init__(
     self,
     *,
-    arch_name: str = "vit_small", # , "vit_small", "vit_base", "vit_large", "vit_giant2"
+    arch_name: str = "vit_base", # , "vit_small", "vit_base", "vit_large", "vit_giant2"
     ffn_layer="mlp", # "mlp", "swiglufused"
     pretrained: bool = True,
     head_tasks,

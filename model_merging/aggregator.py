@@ -72,7 +72,7 @@ def aggregate_task_vectors(task_vectors, mm_config):
     shared_tv_state_dict = vector_to_state_dict(merged_tv, task_vectors[0].theta, remove_keys=remove_keys)
     task_specific_tv_state_dict = dict(chain(*(task_vector.tau.items() for task_vector in task_vectors)))
     mtl_task_vector = MTLTaskVector(theta=shared_tv_state_dict, tau=task_specific_tv_state_dict)
-    mtl_task_vector.tasks = dict(chain(*(task_vector.tasks.items() for task_vector in task_vectors))) # Assume one ft model for each task (e.g. there can't be two seg tasks)
+    mtl_task_vector.head_tasks = dict(chain(*(task_vector.head_tasks.items() for task_vector in task_vectors))) # Assume one ft model for each task (e.g. there can't be two seg tasks)
     print("Norm of shared task vector: ", mtl_task_vector.norm())
 
     # if merge_config["name"] not in ["tall_mask", "mag_masking"]:

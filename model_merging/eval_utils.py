@@ -61,7 +61,7 @@ def evaluate_task_vector_at_coef(
 
     _, val_loader, test_loader = get_data_loaders(config, model_merging=True)
     data_loader = val_loader if use_val_dataset else test_loader
-    test_metric = TaskMetric(model.tasks, model.tasks, config["training_params"]["batch_size"], 1, config["model_merging"]["dataset"], include_mtl=True)
+    test_metric = TaskMetric(model.head_tasks, model.head_tasks, config["training_params"]["batch_size"], 1, config["model_merging"]["dataset"], include_mtl=True)
     eval(int(10 * scaling_coef), model, data_loader, test_metric) # 10 * scaling_coef is a hack to change it to an int
     coef_metrics = test_metric.metric
 
@@ -85,7 +85,7 @@ def evaluate_task_vector(
     elif config["model_merging"]["method"] == "zeroshot":
         scaling_coef_range = [0.0]
     elif config["model_merging"]["method"] == "average":
-        scaling_coef_range = [1 / len(task_vector.tasks)]
+        scaling_coef_range = [1 / len(task_vector.head_tasks)]
     elif config["model_merging"]["specify_lambda"] != "None":
         scaling_coef_range = [config["model_merging"]["specify_lambda"]]
     else:
@@ -113,7 +113,7 @@ def evaluate_task_vector(
             info[scaling_coef] = evaluate_task_vector_at_coef(
                 pt_checkpoint, task_vector, config, scaling_coef, use_val_dataset, eval_masks
             )
-            print(" | ".join([f"{task} metric: {round(info[scaling_coef][task][1], 4)}" for task in task_vector.tasks.keys()]))
+            print(" | ".join([f"{task} metric: {round(info[scaling_coef][task][1], 4)}" for task in task_vector.head_tasks.keys()]))
             print(f"Delta MTL: {round(info[scaling_coef]['all'][0], 2)}")
 
     return info

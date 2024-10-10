@@ -2,6 +2,7 @@ import torch
 
 from typing import Union
 
+from models.dinov2.mtl.multitasker import *
 from training.create_network import *
 from utils import torch_load
 
@@ -118,19 +119,19 @@ class MTLTaskVector(_TaskVector):
             with torch.no_grad():
                 pretrained_model = self._safe_load(pretrained_checkpoint)
                 finetuned_model = self._safe_load(finetuned_checkpoint)
-                self.tasks = finetuned_model.tasks
+                self.head_tasks = finetuned_model.head_tasks
 
                 # parse pretrained_checkpoint
                 pretrained_state_dict = {
                     k: v for k, v in pretrained_model.state_dict().items()
-                    if not any(task in k for task in pretrained_model.tasks)
+                    if not any(task in k for task in pretrained_model.head_tasks)
                 }
 
                 # parse finetuned_checkpoint
                 finetuned_state_dict = {}
                 task_specific_state_dict = {}
                 for k, v in finetuned_model.state_dict().items():
-                    if any(task in k for task in self.tasks):
+                    if any(task in k for task in self.head_tasks):
                         task_specific_state_dict[k] = v
                     else:
                         finetuned_state_dict[k] = v
@@ -144,7 +145,7 @@ class MTLTaskVector(_TaskVector):
         elif isinstance(checkpoint, nn.Module):
             # Create a new model with the same architecture
             model_class_name = checkpoint.__class__.__name__
-            new_model = globals()[model_class_name](checkpoint.tasks)
+            new_model = globals()[model_class_name](head_tasks=checkpoint.head_tasks)
             new_model.load_state_dict(checkpoint.state_dict())
             return new_model
         else:

@@ -19,18 +19,18 @@ training_params:
   with_noise: false # with noise prediction task
 
   # Training parameters
-  total_epochs: 5
-  lr: 0.001 # 1e-3, 1e-5
+  total_epochs: 10
+  lr: 0.000001 # 0.001 0.000001
   batch_size: 16
   gpu: 1 # gpu ID
   seed: 612
 
 model_merging:
   method: "sum"
-  pt_model_file: "models/mtl_model.pt"
+  pt_model_file: "checkpoints/mtl_model.pt"
   ft_model_files:
-    - "models/split/linear_probing/seg_model.pt"
-    - "models/split/linear_probing/depth_model.pt"
+    - "checkpoints/dinov2/linear_probing/seg_model.pt"
+    - "checkpoints/dinov2/linear_probing/depth_model.pt"
   dataset: "nyuv2" # nyuv2, cityscapes
   network: "split" # split, mtan
   
