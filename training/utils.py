@@ -131,11 +131,6 @@ class TaskMetric:
                 stl = {'seg': 0.4337, 'depth': 0.5224, 'normal': 22.40}
             elif self.dataset == 'cityscapes':
                 stl = {'seg': 0.5620, 'part_seg': 0.5274, 'disp': 0.84}
-            elif self.dataset == 'cifar100':
-                stl = {'class_0': 0.6865, 'class_1': 0.8100, 'class_2': 0.8234, 'class_3': 0.8371, 'class_4': 0.8910,
-                       'class_5': 0.8872, 'class_6': 0.8475, 'class_7': 0.8588, 'class_8': 0.8707, 'class_9': 0.9015,
-                       'class_10': 0.8976, 'class_11': 0.8488, 'class_12': 0.9033, 'class_13': 0.8441, 'class_14': 0.5537,
-                       'class_15': 0.7584, 'class_16': 0.7279, 'class_17': 0.7537, 'class_18': 0.9148, 'class_19': 0.9469}
 
             delta_mtl = 0
             for task_id in self.train_tasks:
@@ -356,28 +351,24 @@ def eval(
         for batch_idx in range(data_batch):
             img, target = next(dataset)
             img = img.to(device)
-            target = {task_id: target[task_id].to(device) for task_id in model.tasks.keys()}
+            target = {task_id: target[task_id].to(device) for task_id in model.head_tasks.keys()}
 
             test_res = model(img, None, img_gt=target, return_loss=True)
             
             test_metric.update_metric(test_res, target)
 
             if batch_idx == viz_batch_idx:
-                for i, task_id in enumerate(model.tasks):
+                for task_id in model.head_tasks:
                     if task_id in VISUALIZATION_FUNCS:
-                        VISUALIZATION_FUNCS[task_id](epoch, img, test_res[i]["pred"], target[task_id])
-
-            # TODO: remove this
-            if batch_idx==5:
-                break
+                        VISUALIZATION_FUNCS[task_id](epoch, img, test_res[task_id]["pred"], target[task_id])
 
     test_str = test_metric.compute_metric()
     test_metric.reset()
 
     wandb.log({
-        **{f"train/loss/{task_id}": task_data["total_loss"] for task_id, task_data in test_res.items()},
-        **{f"test/metric/{task_id}": test_metric.get_metric(task_id) for task_id in model.tasks}
-    }, step=epoch)
+        **{f"test/loss/{task_id}": test_res[task_id]["total_loss"] for task_id in model.head_tasks},
+        **{f"test/metric/{task_id}": test_metric.get_metric(task_id) for task_id in model.head_tasks}
+    },) # step=epoch
 
     return test_str
 

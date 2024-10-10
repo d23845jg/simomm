@@ -75,7 +75,7 @@ Define model saving and loading functions here.
 def torch_save(model, filename):
     metadata = {
         "model_class": model.__class__.__name__,
-        "tasks": model.tasks,
+        "tasks": model.head_tasks,
         "state_dict": model.state_dict(),
     }
     torch.save(metadata, filename)
